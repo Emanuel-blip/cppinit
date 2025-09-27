@@ -15,7 +15,7 @@ generate_gitignore() {
         return
     fi
     
-    cat > "$file" << \'EOF\'
+    cat > "$file" << EOF
 # Compiled Object files
 *.o
 *.obj

@@ -59,7 +59,7 @@ make run
 EOF
 
     if [[ "$FLAG_MINIMAL" != true ]]; then
-        cat >> "$file" << \'EOF\'
+        cat >> "$file" << EOF
 
 # Run tests
 make test
@@ -79,7 +79,7 @@ EOF
 EOF
 
     if [[ "$FLAG_MINIMAL" != true ]]; then
-        cat >> "$file" << \'EOF\'
+        cat >> "$file" << EOF
 - `make test` - Build and run tests
 EOF
     fi
@@ -102,12 +102,12 @@ ${PROJECT_NAME}/
 EOF
 
     if [[ "$FLAG_MINIMAL" != true ]]; then
-        cat >> "$file" << \'EOF\'
+        cat >> "$file" << EOF
 ├── tests/            # Unit tests
 EOF
     fi
     
-    cat >> "$file" << \'EOF\'
+    cat >> "$file" << EOF
 ├── docs/             # Documentation
 ├── .config/          # Configuration files
 ├── Makefile          # Build configuration
@@ -125,7 +125,7 @@ EOF
 EOF
 
     if [[ "$FLAG_MINIMAL" != true ]]; then
-        cat >> "$file" << \'EOF\'
+        cat >> "$file" << EOF
 3. Add tests to `tests/`
 4. Run `make test` to verify
 EOF
