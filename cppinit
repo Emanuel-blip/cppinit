@@ -5,24 +5,56 @@
 # Author: C++ Project Initializer Team
 # License: MIT
 
+# Exit on errors, undefined variables, and fail pipelines if any command fails
 set -euo pipefail
 
-# Source modular library files
-source "$(dirname "${BASH_SOURCE[0]}")/lib/helpers/utils.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/core/config.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/core/input_handler.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/core/directory_manager.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/cpp_files.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/makefile.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/readme.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/gitignore.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/license.sh"
+# ============================================================================
+# SCRIPT DIRECTORY RESOLUTION
+# ============================================================================
+# Get the absolute path to this script, resolving any symlinks.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
 # ============================================================================
-# ARGUMENT PARSING
+# SOURCE LIBRARY FILES
 # ============================================================================
+source "$SCRIPT_DIR/lib/helpers/utils.sh"
+source "$SCRIPT_DIR/lib/core/config.sh"
+source "$SCRIPT_DIR/lib/core/input_handler.sh"
+source "$SCRIPT_DIR/lib/core/directory_manager.sh"
+source "$SCRIPT_DIR/lib/generators/cpp_files.sh"
+source "$SCRIPT_DIR/lib/generators/makefile.sh"
+source "$SCRIPT_DIR/lib/generators/readme.sh"
+source "$SCRIPT_DIR/lib/generators/gitignore.sh"
+source "$SCRIPT_DIR/lib/generators/license.sh"
 
-# Display help message
+# ============================================================================
+# DEFAULT FLAGS AND VARIABLES
+# ============================================================================
+FLAG_MINIMAL=false
+FLAG_NO_GIT=false
+FLAG_QUIET=false
+FLAG_VERBOSE=false
+FLAG_DRY_RUN=false
+FLAG_FORCE=false
+FLAG_INIT_ONLY=false
+FLAG_ASCII=true
+FLAG_NON_INTERACTIVE=false
+
+AUTHOR_NAME="$(whoami)"
+LICENSE_TYPE="MIT"
+BUILD_MODE="Debug"
+PROJECT_NAME=""
+PROJECT_ROOT=""
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 show_help() {
     print_banner
     cat << EOF
@@ -31,30 +63,27 @@ Usage: ${SCRIPT_NAME} [OPTIONS] [PROJECT_NAME]
 Professional C++ Project Initializer
 
 Options:
-  -h, --help                Display this help message
-  -v, --version             Display version information
-  -m, --minimal             Create a minimal project (no tests)
-  -g, --no-git              Do not initialize Git repository
-  -q, --quiet               Suppress all output except errors
-  -V, --verbose             Enable verbose output
-  -n, --dry-run             Perform a dry run without making changes
-  -f, --force               Overwrite existing project directory
-  -i, --init-only           Only initialize project structure, skip Makefile and other files
-  -a, --no-ascii            Disable ASCII banner
-  -y, --non-interactive     Run in non-interactive mode with default values
-  --author <name>           Specify author name (default: $(whoami))
-  --license <type>          Specify license type (MIT, GPL-3.0, Apache-2.0, BSD-3-Clause, Unlicense)
-  --mode <mode>             Specify build mode (Debug, Release)
+  -h, --help            Show this help
+  -v, --version         Show version
+  -m, --minimal         Create minimal project (no tests)
+  -g, --no-git          Do not initialize git
+  -q, --quiet           Suppress output
+  -V, --verbose         Enable verbose output
+  -n, --dry-run         Do not make changes
+  -f, --force           Overwrite existing directory
+  -i, --init-only       Only create directory structure
+  -a, --no-ascii        Disable ASCII banner
+  -y, --non-interactive Run with defaults
+  --author <name>       Specify author
+  --license <type>      License type (MIT, GPL-3.0, Apache-2.0)
+  --mode <mode>         Build mode (Debug, Release)
 
 Examples:
   ${SCRIPT_NAME} MyProject
   ${SCRIPT_NAME} --minimal --no-git MyMinimalProject
-  ${SCRIPT_NAME} -f --author "John Doe" MyForceProject
-  ${SCRIPT_NAME} -y --license GPL-3.0 MyGPLProject
 EOF
 }
 
-# Parse command-line arguments
 parse_args() {
     while (( "$#" > 0 )); do
         case "$1" in
@@ -66,39 +95,21 @@ parse_args() {
                 print_color "$GREEN" "${SCRIPT_NAME} version ${SCRIPT_VERSION}"
                 exit 0
                 ;;
-            -m|--minimal)
-                FLAG_MINIMAL=true
-                ;;
-            -g|--no-git)
-                FLAG_NO_GIT=true
-                ;;
-            -q|--quiet)
-                FLAG_QUIET=true
-                ;;
-            -V|--verbose)
-                FLAG_VERBOSE=true
-                ;;
-            -n|--dry-run)
-                FLAG_DRY_RUN=true
-                ;;
-            -f|--force)
-                FLAG_FORCE=true
-                ;;
-            -i|--init-only)
-                FLAG_INIT_ONLY=true
-                ;;
-            -a|--no-ascii)
-                FLAG_ASCII=false
-                ;;
-            -y|--non-interactive)
-                FLAG_NON_INTERACTIVE=true
-                ;;
+            -m|--minimal) FLAG_MINIMAL=true ;;
+            -g|--no-git) FLAG_NO_GIT=true ;;
+            -q|--quiet) FLAG_QUIET=true ;;
+            -V|--verbose) FLAG_VERBOSE=true ;;
+            -n|--dry-run) FLAG_DRY_RUN=true ;;
+            -f|--force) FLAG_FORCE=true ;;
+            -i|--init-only) FLAG_INIT_ONLY=true ;;
+            -a|--no-ascii) FLAG_ASCII=false ;;
+            -y|--non-interactive) FLAG_NON_INTERACTIVE=true ;;
             --author)
                 if [[ -n "$2" && "$2" != -* ]]; then
                     AUTHOR_NAME="$2"
                     shift
                 else
-                    print_error "--author requires an argument"
+                    print_error "--author requires a value"
                     exit 1
                 fi
                 ;;
@@ -107,7 +118,7 @@ parse_args() {
                     LICENSE_TYPE="$2"
                     shift
                 else
-                    print_error "--license requires an argument"
+                    print_error "--license requires a value"
                     exit 1
                 fi
                 ;;
@@ -116,7 +127,7 @@ parse_args() {
                     BUILD_MODE="$2"
                     shift
                 else
-                    print_error "--mode requires an argument"
+                    print_error "--mode requires a value"
                     exit 1
                 fi
                 ;;
@@ -129,7 +140,7 @@ parse_args() {
                 if [[ -z "$PROJECT_NAME" ]]; then
                     PROJECT_NAME="$1"
                 else
-                    print_error "Too many arguments. Project name already set to \"$PROJECT_NAME\""
+                    print_error "Project name already set to \"$PROJECT_NAME\""
                     show_help
                     exit 1
                 fi
@@ -140,39 +151,41 @@ parse_args() {
 }
 
 # ============================================================================
-# MAIN LOGIC
+# MAIN FUNCTION
 # ============================================================================
-
 main() {
     parse_args "$@"
-    
+
     print_banner
-    
+
     check_prerequisites
-    
+
+    # Interactive setup if needed
     if [[ "$FLAG_NON_INTERACTIVE" != true && -z "$PROJECT_NAME" ]]; then
         interactive_setup
     fi
-    
+
     if [[ -z "$PROJECT_NAME" ]]; then
-        print_error "Project name is required. Use -y for non-interactive mode or provide it as an argument."
+        print_error "Project name is required. Use -y or provide a name."
         exit 1
     fi
-    
+
     PROJECT_ROOT="$(pwd)/$PROJECT_NAME"
-    
+
     if ! check_directory_conflict "$PROJECT_ROOT"; then
         exit 1
     fi
-    
+
     print_info "Initializing C++ project: ${BOLD}${PROJECT_NAME}${RESET}"
     print_verbose "Project root: $PROJECT_ROOT"
     print_verbose "Author: $AUTHOR_NAME"
     print_verbose "License: $LICENSE_TYPE"
     print_verbose "Build Mode: $BUILD_MODE"
-    
+
+    # Create directory structure
     create_directories
-    
+
+    # Generate project files
     generate_main_cpp
     generate_header
     generate_implementation
@@ -181,17 +194,18 @@ main() {
     generate_readme
     generate_gitignore
     generate_license
-    
+
+    # Initialize Git if enabled
     if [[ "$FLAG_NO_GIT" != true ]]; then
         print_info "Initializing Git repository..."
         if [[ "$FLAG_DRY_RUN" == true ]]; then
-            print_warning "DRY RUN: Would initialize Git repo"
+            print_warning "DRY RUN: Would initialize Git repository"
         else
             git -C "$PROJECT_ROOT" init -b main >/dev/null 2>&1
             print_success "Git repository initialized"
         fi
     fi
-    
+
     print_separator
     print_success "Project \"${PROJECT_NAME}\" created successfully!"
     print_info "Next steps:"
@@ -202,4 +216,3 @@ main() {
 }
 
 main "$@"
-
