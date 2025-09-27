@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+
+# cppinit - Professional C++ Project Initializer
+# Version: 1.0.0
+# Author: C++ Project Initializer Team
+# License: MIT
+
+set -euo pipefail
+
+# Source modular library files
+source "$(dirname "${BASH_SOURCE[0]}")/lib/helpers/utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/core/config.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/core/input_handler.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/core/directory_manager.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/cpp_files.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/makefile.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/readme.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/gitignore.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/generators/license.sh"
+
+# ============================================================================
+# ARGUMENT PARSING
+# ============================================================================
+
+# Display help message
+show_help() {
+    print_banner
+    cat << EOF
+Usage: ${SCRIPT_NAME} [OPTIONS] [PROJECT_NAME]
+
+Professional C++ Project Initializer
+
+Options:
+  -h, --help                Display this help message
+  -v, --version             Display version information
+  -m, --minimal             Create a minimal project (no tests)
+  -g, --no-git              Do not initialize Git repository
+  -q, --quiet               Suppress all output except errors
+  -V, --verbose             Enable verbose output
+  -n, --dry-run             Perform a dry run without making changes
+  -f, --force               Overwrite existing project directory
+  -i, --init-only           Only initialize project structure, skip Makefile and other files
+  -a, --no-ascii            Disable ASCII banner
+  -y, --non-interactive     Run in non-interactive mode with default values
+  --author <name>           Specify author name (default: $(whoami))
+  --license <type>          Specify license type (MIT, GPL-3.0, Apache-2.0, BSD-3-Clause, Unlicense)
+  --mode <mode>             Specify build mode (Debug, Release)
+
+Examples:
+  ${SCRIPT_NAME} MyProject
+  ${SCRIPT_NAME} --minimal --no-git MyMinimalProject
+  ${SCRIPT_NAME} -f --author "John Doe" MyForceProject
+  ${SCRIPT_NAME} -y --license GPL-3.0 MyGPLProject
+EOF
+}
+
+# Parse command-line arguments
+parse_args() {
+    while (( "$#" > 0 )); do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                print_color "$GREEN" "${SCRIPT_NAME} version ${SCRIPT_VERSION}"
+                exit 0
+                ;;
+            -m|--minimal)
+                FLAG_MINIMAL=true
+                ;;
+            -g|--no-git)
+                FLAG_NO_GIT=true
+                ;;
+            -q|--quiet)
+                FLAG_QUIET=true
+                ;;
+            -V|--verbose)
+                FLAG_VERBOSE=true
+                ;;
+            -n|--dry-run)
+                FLAG_DRY_RUN=true
+                ;;
+            -f|--force)
+                FLAG_FORCE=true
+                ;;
+            -i|--init-only)
+                FLAG_INIT_ONLY=true
+                ;;
+            -a|--no-ascii)
+                FLAG_ASCII=false
+                ;;
+            -y|--non-interactive)
+                FLAG_NON_INTERACTIVE=true
+                ;;
+            --author)
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    AUTHOR_NAME="$2"
+                    shift
+                else
+                    print_error "--author requires an argument"
+                    exit 1
+                fi
+                ;;
+            --license)
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    LICENSE_TYPE="$2"
+                    shift
+                else
+                    print_error "--license requires an argument"
+                    exit 1
+                fi
+                ;;
+            --mode)
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    BUILD_MODE="$2"
+                    shift
+                else
+                    print_error "--mode requires an argument"
+                    exit 1
+                fi
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                if [[ -z "$PROJECT_NAME" ]]; then
+                    PROJECT_NAME="$1"
+                else
+                    print_error "Too many arguments. Project name already set to \"$PROJECT_NAME\""
+                    show_help
+                    exit 1
+                fi
+                ;;
+        esac
+        shift
+    done
+}
+
+# ============================================================================
+# MAIN LOGIC
+# ============================================================================
+
+main() {
+    parse_args "$@"
+    
+    print_banner
+    
+    check_prerequisites
+    
+    if [[ "$FLAG_NON_INTERACTIVE" != true && -z "$PROJECT_NAME" ]]; then
+        interactive_setup
+    fi
+    
+    if [[ -z "$PROJECT_NAME" ]]; then
+        print_error "Project name is required. Use -y for non-interactive mode or provide it as an argument."
+        exit 1
+    fi
+    
+    PROJECT_ROOT="$(pwd)/$PROJECT_NAME"
+    
+    if ! check_directory_conflict "$PROJECT_ROOT"; then
+        exit 1
+    fi
+    
+    print_info "Initializing C++ project: ${BOLD}${PROJECT_NAME}${RESET}"
+    print_verbose "Project root: $PROJECT_ROOT"
+    print_verbose "Author: $AUTHOR_NAME"
+    print_verbose "License: $LICENSE_TYPE"
+    print_verbose "Build Mode: $BUILD_MODE"
+    
+    create_directories
+    
+    generate_main_cpp
+    generate_header
+    generate_implementation
+    generate_test_file
+    generate_makefile
+    generate_readme
+    generate_gitignore
+    generate_license
+    
+    if [[ "$FLAG_NO_GIT" != true ]]; then
+        print_info "Initializing Git repository..."
+        if [[ "$FLAG_DRY_RUN" == true ]]; then
+            print_warning "DRY RUN: Would initialize Git repo"
+        else
+            git -C "$PROJECT_ROOT" init -b main >/dev/null 2>&1
+            print_success "Git repository initialized"
+        fi
+    fi
+    
+    print_separator
+    print_success "Project \"${PROJECT_NAME}\" created successfully!"
+    print_info "Next steps:"
+    print_info "  cd ${PROJECT_NAME}"
+    print_info "  make build"
+    print_info "  make run"
+    print_separator
+}
+
+main "$@"
+
