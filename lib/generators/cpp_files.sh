@@ -2,188 +2,291 @@
 
 # lib/generators/cpp_files.sh - Generates C++ source and header files for cppinit
 
+# Shell guard to prevent double-sourcing issues
+if [[ -n "${__CPP_FILES_SH_SOURCED:-}" ]]; then
+    return 0
+fi
+__CPP_FILES_SH_SOURCED=true
+
 # Source necessary utilities and config
 source "$(dirname "${BASH_SOURCE[0]}")/../helpers/utils.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../core/config.sh"
 
-# Generate main.cpp
-generate_main_cpp() {
-    local file="$PROJECT_ROOT/src/main.cpp"
-    
-    if [[ "$FLAG_DRY_RUN" == true ]]; then
-        print_warning "DRY RUN: Would create main.cpp"
-        return
-    fi
-    
-    cat > "$file" << EOF
-#include <iostream>
-#include "${PROJECT_NAME}.hpp"
-
-int main() {
-    std::cout << "Hello from ${PROJECT_NAME}!" << std::endl;
-    
-    // Example usage of generated header
-    ${PROJECT_NAME}::greet("World");
-    
-    return 0;
-}
-EOF
-    
-    print_success "Generated src/main.cpp"
-    print_verbose "Main source file created with basic I/O and header usage"
+# --- Internal Class/File Naming ---
+# Sanitizes PROJECT_NAME for use as a C++ class and file prefix (e.g., My-Project -> MyProject)
+get_sanitized_name() {
+    echo "$PROJECT_NAME" | sed 's/[^a-zA-Z0-9_]//g'
 }
 
-# Generate header file
+# Generates the header file content
 generate_header() {
-    local header_guard="${PROJECT_NAME^^}_HPP"
-    local file="$PROJECT_ROOT/include/${PROJECT_NAME}.hpp"
-    
-    if [[ "$FLAG_DRY_RUN" == true ]]; then
-        print_warning "DRY RUN: Would create ${PROJECT_NAME}.hpp"
+    if [[ "$FLAG_INIT_ONLY" == true ]]; then
         return
     fi
     
-    cat > "$file" << EOF
+    local sanitized_name
+    local class_name
+    local header_path
+    local header_guard
+    
+    sanitized_name=$(get_sanitized_name)
+    class_name="${sanitized_name}Class"
+    # Re-added safe expansion for INCLUDE_DIR
+    header_path="$PROJECT_ROOT/${INCLUDE_DIR:-include}/${sanitized_name}.hpp"
+    header_guard=$(echo "${sanitized_name}_${class_name}_HPP" | tr '[:lower:]' '[:upper:]')
+    
+    if [[ "$FLAG_DRY_RUN" == true ]]; then
+        print_warning "DRY RUN: Would create header file: ${INCLUDE_DIR:-include}/${sanitized_name}.hpp"
+        return
+    fi
+
+    # Use single quotes for EOF to ensure literal output of Doxygen and C++ syntax
+    cat > "$header_path" << 'EOF'
 #ifndef ${header_guard}
 #define ${header_guard}
 
+/**
+ * @file ${sanitized_name}.hpp
+ *
+ * @brief Definition of class
+ * @class ${PROJECT_NAME}::${class_name}
+ * * @copyright ${AUTHOR_NAME}
+ */
+
+// Headers from this project
+#include "${sanitized_name}.hpp"
+
+// Headers from other projects
+
+// Headers from standard libraries
 #include <string>
+#include <iostream>
+
+namespace ${PROJECT_NAME} {
+    class ${class_name};
+}
 
 /**
- * @brief Main namespace for ${PROJECT_NAME}
+ * @brief Object for describing ${class_name}.
+ *
+ * Object for describing ${class_name} properties.
  */
-namespace ${PROJECT_NAME} {
-    
-    /**
-     * @brief Greet someone with a personalized message
-     * @param name The name to greet
-     */
-    void greet(const std::string& name);
-    
-    /**
-     * @brief Get the version of this library
-     * @return Version string
-     */
-    std::string getVersion();
-    
-} // namespace ${PROJECT_NAME}
+class ${PROJECT_NAME}::${class_name}
+{
+private:
+
+public:
+};
 
 #endif // ${header_guard}
 EOF
     
-    print_success "Generated include/${PROJECT_NAME}.hpp"
-    print_verbose "Header file created with namespace and documentation"
+    # Replace variables after literal EOF to insert dynamic values
+    sed -i \
+        -e "s/\${header_guard}/${header_guard}/g" \
+        -e "s/\${sanitized_name}/${sanitized_name}/g" \
+        -e "s/\${class_name}/${class_name}/g" \
+        -e "s/\${PROJECT_NAME}/${PROJECT_NAME}/g" \
+        -e "s/\${AUTHOR_NAME}/${AUTHOR_NAME}/g" \
+        "$header_path"
+        
+    print_success "Generated header: ${INCLUDE_DIR:-include}/${sanitized_name}.hpp"
+    # Updated print message to reflect new namespace
+    print_verbose "Header created for class ${PROJECT_NAME}::${class_name}"
 }
 
-# Generate implementation file
+# Generates the source file content (implementation)
 generate_implementation() {
-    local file="$PROJECT_ROOT/src/${PROJECT_NAME}.cpp"
-    
-    if [[ "$FLAG_DRY_RUN" == true ]]; then
-        print_warning "DRY RUN: Would create ${PROJECT_NAME}.cpp"
+    if [[ "$FLAG_INIT_ONLY" == true ]]; then
         return
     fi
     
-    cat > "$file" << EOF
-#include "${PROJECT_NAME}.hpp"
-#include <iostream>
+    local sanitized_name
+    local class_name
+    local impl_path
+    
+    sanitized_name=$(get_sanitized_name)
+    class_name="${sanitized_name}Class"
+    # Re-added safe expansion for SRC_DIR
+    impl_path="$PROJECT_ROOT/${SRC_DIR:-src}/${sanitized_name}.cpp"
+    
+    if [[ "$FLAG_DRY_RUN" == true ]]; then
+        print_warning "DRY RUN: Would create implementation file: ${SRC_DIR:-src}/${sanitized_name}.cpp"
+        return
+    fi
+    
+    # Use single quotes for EOF for literal output
+    cat > "$impl_path" << 'EOF'
+/**
+ * @file ${sanitized_name}.cpp
+ *
+ * @brief Implementation of class
+ * @class ${PROJECT_NAME}::${class_name}
+ * * @copyright ${AUTHOR_NAME}
+ */
 
-namespace ${PROJECT_NAME} {
-    
-    void greet(const std::string& name) {
-        std::cout << "Hello, " << name << "! Welcome to ${PROJECT_NAME}." << std::endl;
-    }
-    
-    std::string getVersion() {
-        return "1.0.0";
-    }
-    
-} // namespace ${PROJECT_NAME}
+// Headers from this project
+#include "${sanitized_name}.hpp"
+
+// Headers from other projects
+
+// Headers from standard libraries
+#include <string>
+#include <iostream>
 EOF
+
+    # Replace variables after literal EOF
+    sed -i \
+        -e "s/\${sanitized_name}/${sanitized_name}/g" \
+        -e "s/\${class_name}/${class_name}/g" \
+        -e "s/\${PROJECT_NAME}/${PROJECT_NAME}/g" \
+        -e "s/\${AUTHOR_NAME}/${AUTHOR_NAME}/g" \
+        "$impl_path"
     
-    print_success "Generated src/${PROJECT_NAME}.cpp"
-    print_verbose "Implementation file created with basic functionality"
+    print_success "Generated implementation: ${SRC_DIR:-src}/${sanitized_name}.cpp"
+    print_verbose "Implementation created for class ${PROJECT_NAME}::${class_name}"
 }
 
-# Generate test file
-generate_test_file() {
-    if [[ "$FLAG_MINIMAL" == true ]]; then
+# Generates a basic main.cpp file
+generate_main_cpp() {
+    if [[ "$FLAG_INIT_ONLY" == true ]]; then
         return
     fi
     
-    local file="$PROJECT_ROOT/tests/test_${PROJECT_NAME}.cpp"
+    local sanitized_name
+    local class_name
+    local main_path
+    
+    sanitized_name=$(get_sanitized_name)
+    class_name="${sanitized_name}Class"
+    # Re-added safe expansion for SRC_DIR
+    main_path="$PROJECT_ROOT/${SRC_DIR:-src}/main.cpp"
     
     if [[ "$FLAG_DRY_RUN" == true ]]; then
-        print_warning "DRY RUN: Would create test file"
+        print_warning "DRY RUN: Would create main executable file: ${SRC_DIR:-src}/main.cpp"
         return
     fi
-    
-    cat > "$file" << EOF
-#include "${PROJECT_NAME}.hpp"
+
+    cat > "$main_path" << 'EOF'
+/**
+ * @file main.cpp
+ *
+ * @brief Main application entry point.
+ * * @copyright ${AUTHOR_NAME}
+ */
+
+// Headers from this project
+#include "${sanitized_name}.hpp"
+
+// Headers from other projects
+
+// Headers from standard libraries
 #include <iostream>
-#include <cassert>
 #include <string>
 
-// Simple test framework macros
-#define ASSERT_TRUE(condition) \\
-    do { \\
-        if (!(condition)) { \\
-            std::cerr << "FAIL: " << #condition << " at line " << __LINE__ << std::endl; \\
-            return false; \\
-        } else { \\
-            std::cout << "PASS: " << #condition << std::endl; \\
-        } \\
-    } while (0)
-
-#define ASSERT_EQ(expected, actual) \\
-    do { \\
-        if ((expected) != (actual)) { \\
-            std::cerr << "FAIL: Expected " << (expected) << " but got " << (actual) \\
-                      << " at line " << __LINE__ << std::endl; \\
-            return false; \\
-        } else { \\
-            std::cout << "PASS: " << #expected << " == " << #actual << std::endl; \\
-        } \\
-    } while (0)
-
-bool test_version() {
-    std::cout << "Testing getVersion()..." << std::endl;
-    std::string version = ${PROJECT_NAME}::getVersion();
-    ASSERT_TRUE(!version.empty());
-    ASSERT_EQ("1.0.0", version);
-    return true;
-}
-
-bool test_greet() {
-    std::cout << "Testing greet()..." << std::endl;
-    // This test just ensures greet doesn\'t crash
-    // In a real scenario, you might capture stdout
-    ${PROJECT_NAME}::greet("Test");
-    ASSERT_TRUE(true); // If we reach here, greet didn\'t crash
-    return true;
-}
-
-int main() {
-    std::cout << "Running tests for ${PROJECT_NAME}..." << std::endl;
-    std::cout << "================================" << std::endl;
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
     
-    bool all_passed = true;
-    
-    all_passed &= test_version();
-    all_passed &= test_greet();
-    
-    std::cout << "================================" << std::endl;
-    if (all_passed) {
-        std::cout << "All tests PASSED!" << std::endl;
-        return 0;
-    } else {
-        std::cout << "Some tests FAILED!" << std::endl;
-        return 1;
-    }
+    // Use the generated class
+    ${PROJECT_NAME}::${class_name} app;
+
+    std::cout << "Starting ${PROJECT_NAME} application..." << std::endl;
+
+    // Example of using a member function
+    app.perform_operation();
+
+    return 0;
 }
 EOF
+
+    # Replace variables after literal EOF
+    sed -i \
+        -e "s/\${sanitized_name}/${sanitized_name}/g" \
+        -e "s/\${class_name}/${class_name}/g" \
+        -e "s/\${PROJECT_NAME}/${PROJECT_NAME}/g" \
+        -e "s/\${AUTHOR_NAME}/${AUTHOR_NAME}/g" \
+        "$main_path"
     
-    print_success "Generated tests/test_${PROJECT_NAME}.cpp"
-    print_verbose "Test file created with basic assertion framework"
+    print_success "Generated main executable: ${SRC_DIR:-src}/main.cpp"
+}
+
+# Generates a basic test file
+generate_test_file() {
+    if [[ "$FLAG_MINIMAL" == true || "$FLAG_INIT_ONLY" == true ]]; then
+        return
+    fi
+    
+    local sanitized_name
+    local class_name
+    local test_path
+    
+    sanitized_name=$(get_sanitized_name)
+    class_name="${sanitized_name}Class"
+    # Re-added safe expansion for TEST_DIR
+    test_path="$PROJECT_ROOT/${TEST_DIR:-tests}/${sanitized_name}_test.cpp"
+    
+    if [[ "$FLAG_DRY_RUN" == true ]]; then
+        print_warning "DRY RUN: Would create test file: ${TEST_DIR:-tests}/${sanitized_name}_test.cpp"
+        return
+    fi
+
+    cat > "$test_path" << 'EOF'
+/**
+ * @file ${sanitized_name}_test.cpp
+ *
+ * @brief Unit tests for the ${PROJECT_NAME}::${class_name} class.
+ * * @copyright ${AUTHOR_NAME}
+ */
+
+// Headers from this project
+#include "${sanitized_name}.hpp"
+
+// Headers from standard libraries
+#include <iostream>
+#include <cassert>
+
+// Simple assertion macro (replace with a proper testing framework like Catch2/GoogleTest)
+#define TEST_ASSERT(condition, message) \
+    if (!(condition)) { \
+        std::cerr << "FAILED: " << message << std::endl; \
+        exit(1); \
+    }
+
+void test_default_construction()
+{
+    ${PROJECT_NAME}::${class_name} obj;
+    // Test that the constructor runs without exception
+    std::cout << "Test 'test_default_construction' passed." << std::endl;
+}
+
+void test_helper_function()
+{
+    ${PROJECT_NAME}::${class_name} obj;
+    // Test that the function can be called
+    obj.perform_operation();
+    std::cout << "Test 'test_helper_function' passed." << std::endl;
+}
+
+int main()
+{
+    std::cout << "--- Running Unit Tests for ${PROJECT_NAME}::${class_name} ---" << std::endl;
+    test_default_construction();
+    test_helper_function();
+    std::cout << "--- All Tests Passed Successfully ---" << std::endl;
+    return 0;
+}
+EOF
+
+    # Replace variables after literal EOF
+    sed -i \
+        -e "s/\${sanitized_name}/${sanitized_name}/g" \
+        -e "s/\${class_name}/${class_name}/g" \
+        -e "s/\${PROJECT_NAME}/${PROJECT_NAME}/g" \
+        -e "s/\${AUTHOR_NAME}/${AUTHOR_NAME}/g" \
+        "$test_path"
+    
+    print_success "Generated test file: ${TEST_DIR:-tests}/${sanitized_name}_test.cpp"
 }
 
